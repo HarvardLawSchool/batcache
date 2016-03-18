@@ -134,10 +134,10 @@ class batcache {
 	function configure_groups() {
 		// Configure the memcached client
 		if ( ! $this->remote )
-			if ( function_exists('wp_cache_add_no_remote_groups') )
-				wp_cache_add_no_remote_groups(array($this->group));
-		if ( function_exists('wp_cache_add_global_groups') )
-			wp_cache_add_global_groups(array($this->group));
+			if ( function_exists('bc_cache_add_no_remote_groups') )
+				bc_cache_add_no_remote_groups(array($this->group));
+		if ( function_exists('bc_cache_add_global_groups') )
+			bc_cache_add_global_groups(array($this->group));
 	}
 
 	// Defined here because timer_stop() calls number_format_i18n()
@@ -156,26 +156,26 @@ class batcache {
 
 	function ob($output) {
 		// PHP5 and objects disappearing before output buffers?
-		wp_cache_init();
+		bc_cache_init();
 
-		// Remember, $wp_object_cache was clobbered in wp-settings.php so we have to repeat this.
+		// Remember, $bc_object_cache was clobbered in wp-settings.php so we have to repeat this.
 		$this->configure_groups();
 
 		if ( $this->cancel !== false ) {
-			wp_cache_delete( "{$this->url_key}_genlock", $this->group );
+			bc_cache_delete( "{$this->url_key}_genlock", $this->group );
 			return $output;
 		}
 
 		// Do not batcache blank pages unless they are HTTP redirects
 		$output = trim($output);
 		if ( $output === '' && (!$this->redirect_status || !$this->redirect_location) ) {
-			wp_cache_delete( "{$this->url_key}_genlock", $this->group );
+			bc_cache_delete( "{$this->url_key}_genlock", $this->group );
 			return;
 		}
 
 		// Do not cache 5xx responses
 		if ( isset( $this->status_code ) && intval($this->status_code / 100) == 5 ) {
-			wp_cache_delete( "{$this->url_key}_genlock", $this->group );
+			bc_cache_delete( "{$this->url_key}_genlock", $this->group );
 			return $output;
 		}
 
@@ -207,7 +207,7 @@ class batcache {
 		foreach ( $this->cache['headers'] as $header => $values ) {
 			// Do not cache if cookies were set
 			if ( strtolower( $header ) === 'set-cookie' ) {
-				wp_cache_delete( "{$this->url_key}_genlock", $this->group );
+				bc_cache_delete( "{$this->url_key}_genlock", $this->group );
 				return $output;
 			}
 
@@ -218,10 +218,10 @@ class batcache {
 
 		$this->cache['max_age'] = $this->max_age;
 
-		wp_cache_set($this->key, $this->cache, $this->group, $this->max_age + $this->seconds + 30);
+		bc_cache_set($this->key, $this->cache, $this->group, $this->max_age + $this->seconds + 30);
 
 		// Unlock regeneration
-		wp_cache_delete("{$this->url_key}_genlock", $this->group);
+		bc_cache_delete("{$this->url_key}_genlock", $this->group);
 
 		if ( $this->cache_control ) {
 			// Don't clobber Last-Modified header if already set, e.g. by WP::send_headers()
@@ -251,9 +251,9 @@ class batcache {
 	function do_variants($dimensions = false) {
 		// This function is called without arguments early in the page load, then with arguments during the OB handler.
 		if ( $dimensions === false )
-			$dimensions = wp_cache_get("{$this->url_key}_vary", $this->group);
+			$dimensions = bc_cache_get("{$this->url_key}_vary", $this->group);
 		else
-			wp_cache_set("{$this->url_key}_vary", $dimensions, $this->group, $this->max_age + 10);
+			bc_cache_set("{$this->url_key}_vary", $dimensions, $this->group, $this->max_age + 10);
 
 		if ( is_array($dimensions) ) {
 			ksort($dimensions);
@@ -354,12 +354,12 @@ if ( is_array( $_COOKIE) && ! empty( $_COOKIE ) ) {
 	}
 }
 
-if ( ! include_once( WP_CONTENT_DIR . '/object-cache.php' ) )
+if ( ! include_once( WP_CONTENT_DIR . '/batcache-object-cache.php' ) )
 	return;
 
-wp_cache_init(); // Note: wp-settings.php calls wp_cache_init() which clobbers the object made here.
+bc_cache_init(); // Note: wp-settings.php calls bc_cache_init() which clobbers the object made here.
 
-if ( ! is_object( $wp_object_cache ) )
+if ( ! is_object( $bc_object_cache ) )
 	return;
 
 // Now that the defaults are set, you might want to use different settings under certain conditions.
@@ -388,7 +388,7 @@ if ( $batcache->max_age < 1 )
 	return;
 
 // Make sure we can increment. If not, turn off the traffic sensor.
-if ( ! method_exists( $GLOBALS['wp_object_cache'], 'incr' ) )
+if ( ! method_exists( $GLOBALS['bc_object_cache'], 'incr' ) )
 	$batcache->times = 0;
 
 // Necessary to prevent clients using cached version after login cookies set. If this is a problem, comment it out and remove all Last-Modified headers.
@@ -413,12 +413,12 @@ if ( $batcache->is_ssl() )
 $batcache->permalink = 'http://' . $batcache->keys['host'] . $batcache->keys['path'] . ( isset($batcache->keys['query']['p']) ? "?p=" . $batcache->keys['query']['p'] : '' );
 $batcache->url_key = md5($batcache->permalink);
 $batcache->configure_groups();
-$batcache->url_version = (int) wp_cache_get("{$batcache->url_key}_version", $batcache->group);
+$batcache->url_version = (int) bc_cache_get("{$batcache->url_key}_version", $batcache->group);
 $batcache->do_variants();
 $batcache->generate_keys();
 
 // Get the batcache
-$batcache->cache = wp_cache_get($batcache->key, $batcache->group);
+$batcache->cache = bc_cache_get($batcache->key, $batcache->group);
 
 if ( isset( $batcache->cache['version'] ) && $batcache->cache['version'] != $batcache->url_version ) {
 	// Always refresh the cache if a newer version is available.
@@ -429,13 +429,13 @@ if ( isset( $batcache->cache['version'] ) && $batcache->cache['version'] != $bat
 } else {
 	// No batcache item found, or ready to sample traffic again at the end of the batcache life?
 	if ( !is_array($batcache->cache) || time() >= $batcache->cache['time'] + $batcache->max_age - $batcache->seconds ) {
-		wp_cache_add($batcache->req_key, 0, $batcache->group);
-		$batcache->requests = wp_cache_incr($batcache->req_key, 1, $batcache->group);
+		bc_cache_add($batcache->req_key, 0, $batcache->group);
+		$batcache->requests = bc_cache_incr($batcache->req_key, 1, $batcache->group);
 
 		if ( $batcache->requests >= $batcache->times &&
 			time() >= $batcache->cache['time'] + $batcache->cache['max_age']
 		) {
-			wp_cache_delete( $batcache->req_key, $batcache->group );
+			bc_cache_delete( $batcache->req_key, $batcache->group );
 			$batcache->do = true;
 		} else {
 			$batcache->do = false;
@@ -445,7 +445,7 @@ if ( isset( $batcache->cache['version'] ) && $batcache->cache['version'] != $bat
 
 // Obtain cache generation lock
 if ( $batcache->do )
-	$batcache->genlock = wp_cache_add("{$batcache->url_key}_genlock", 1, $batcache->group, 10);
+	$batcache->genlock = bc_cache_add("{$batcache->url_key}_genlock", 1, $batcache->group, 10);
 
 if ( isset( $batcache->cache['time'] ) && // We have cache
 	! $batcache->genlock &&            // We have not obtained cache regeneration lock
@@ -526,8 +526,6 @@ if ( isset( $batcache->cache['time'] ) && // We have cache
 
 	if ( !empty($batcache->cache['status_header']) )
 		header($batcache->cache['status_header'], true);
-
-	batcache_stats( 'batcache', 'total_cached_views' );
 
 	// Have you ever heard a death rattle before?
 	die($batcache->cache['output']);
