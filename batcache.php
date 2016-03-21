@@ -1,15 +1,18 @@
 <?php
 /*
-Plugin name: Batcache Manager
+Plugin name: Batcache Manager (HLS fork)
 Plugin URI: http://wordpress.org/extend/plugins/batcache/
 Description: This optional plugin improves Batcache.
 Author: Andy Skelton
 Author URI: http://andyskelton.com/
-Version: 1.2
+Version: 1.2 HLS
 */
+if ( ! include_once( WP_CONTENT_DIR . '/batcache-object-cache.php' ) )
+	return;
+bc_cache_init();
 
 // Do not load if our advanced-cache.php isn't loaded
-if ( ! isset( $batcache ) || ! is_object($batcache) || ! method_exists( $wp_object_cache, 'incr' ) )
+if ( ! isset( $batcache ) || ! is_object($batcache) || ! method_exists( $bc_object_cache, 'incr' ) )
 	return;
 
 $batcache->configure_groups();
@@ -36,7 +39,7 @@ function batcache_post($post_id) {
 }
 
 function batcache_clear_url($url) {
-	global $batcache, $wp_object_cache;
+	global $batcache, $bc_object_cache;
 
 	if ( empty($url) )
 		return false;
@@ -47,16 +50,16 @@ function batcache_clear_url($url) {
 		$url = 'http://' . $url;
 
 	$url_key = md5( $url );
-	wp_cache_add("{$url_key}_version", 0, $batcache->group);
-	$retval = wp_cache_incr("{$url_key}_version", 1, $batcache->group);
+	bc_cache_add("{$url_key}_version", 0, $batcache->group);
+	$retval = bc_cache_incr("{$url_key}_version", 1, $batcache->group);
 
-	$batcache_no_remote_group_key = array_search( $batcache->group, (array) $wp_object_cache->no_remote_groups );
+	$batcache_no_remote_group_key = array_search( $batcache->group, (array) $bc_object_cache->no_remote_groups );
 	if ( false !== $batcache_no_remote_group_key ) {
 		// The *_version key needs to be replicated remotely, otherwise invalidation won't work.
 		// The race condition here should be acceptable.
-		unset( $wp_object_cache->no_remote_groups[ $batcache_no_remote_group_key ] );
-		$retval = wp_cache_set( "{$url_key}_version", $retval, $batcache->group );
-		$wp_object_cache->no_remote_groups[ $batcache_no_remote_group_key ] = $batcache->group;
+		unset( $bc_object_cache->no_remote_groups[ $batcache_no_remote_group_key ] );
+		$retval = bc_cache_set( "{$url_key}_version", $retval, $batcache->group );
+		$bc_object_cache->no_remote_groups[ $batcache_no_remote_group_key ] = $batcache->group;
 	}
 
 	return $retval;
